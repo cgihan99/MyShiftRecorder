@@ -36,7 +36,31 @@
         <h2>Expenses</h2>
         <ul id="expense-list"></ul>
         <div id="daily-totals"></div>
+        <div id="auth-section">
+  <input type="email" id="auth-email" placeholder="Email">
+  <input type="password" id="auth-password" placeholder="Password">
+  <button id="login-btn">Login</button>
+  <button id="signup-btn">Sign Up</button>
+  <button id="logout-btn" style="display:none;">Logout</button>
+  <span id="auth-status"></span>
+</div>
     </div>
+    <!-- Firebase App (core) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<!-- Firebase Auth -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<!-- Firebase Firestore -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+  // Your Firebase config here
+  const firebaseConfig = {
+    apiKey: "AIzaSyCKidIBf1rHfht1q2AogNjvqgPcNz8_UN4",
+    authDomain: "daily-expense-10347.firebaseapp.com",
+    projectId: "daily-expense-10347",
+    // ...other config
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
     <script src="script.js"></script>
 </body>
 </html> 

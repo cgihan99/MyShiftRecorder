@@ -94,6 +94,159 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = editIndex === null ? 'Add' : 'Update';
     }
 
+    // --- AUTO-SAVE DRAFT LOGIC START ---
+    const FORM_DRAFT_KEY = 'expense-form-draft';
+
+    function saveFormDraft() {
+        const draft = {
+            type: document.getElementById('type').value,
+            date: document.getElementById('date').value,
+            description: document.getElementById('description').value,
+            amount: document.getElementById('amount').value
+        };
+        localStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(draft));
+    }
+
+    function loadFormDraft() {
+        const draftStr = localStorage.getItem(FORM_DRAFT_KEY);
+        if (!draftStr) return;
+        try {
+            const draft = JSON.parse(draftStr);
+            if (draft.type) document.getElementById('type').value = draft.type;
+            if (draft.date) document.getElementById('date').value = draft.date;
+            if (draft.description) document.getElementById('description').value = draft.description;
+            if (draft.amount) document.getElementById('amount').value = draft.amount;
+        } catch {}
+    }
+
+    function clearFormDraft() {
+        localStorage.removeItem(FORM_DRAFT_KEY);
+    }
+
+    // Listen for changes on all form fields
+    ['type', 'date', 'description', 'amount'].forEach(id => {
+        document.getElementById(id).addEventListener('input', saveFormDraft);
+    });
+
+    // Load draft on page load
+    loadFormDraft();
+    // --- AUTO-SAVE DRAFT LOGIC END ---
+
+    // --- FIREBASE AUTH & SYNC LOGIC START ---
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    let user = null;
+    let isSyncing = false;
+
+    // UI elements
+    const emailInput = document.getElementById('auth-email');
+    const passwordInput = document.getElementById('auth-password');
+    const loginBtn = document.getElementById('login-btn');
+    const signupBtn = document.getElementById('signup-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const authStatus = document.getElementById('auth-status');
+    const authSection = document.getElementById('auth-section');
+
+    function setAuthStatus(msg) {
+        authStatus.textContent = msg;
+    }
+
+    function setAuthUI(loggedIn) {
+        if (loggedIn) {
+            emailInput.style.display = 'none';
+            passwordInput.style.display = 'none';
+            loginBtn.style.display = 'none';
+            signupBtn.style.display = 'none';
+            logoutBtn.style.display = '';
+        } else {
+            emailInput.style.display = '';
+            passwordInput.style.display = '';
+            loginBtn.style.display = '';
+            signupBtn.style.display = '';
+            logoutBtn.style.display = 'none';
+        }
+    }
+
+    // Auth event listeners
+    loginBtn.addEventListener('click', async () => {
+        setAuthStatus('Logging in...');
+        try {
+            await auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value);
+            setAuthStatus('Logged in!');
+        } catch (err) {
+            setAuthStatus('Login failed: ' + err.message);
+        }
+    });
+    signupBtn.addEventListener('click', async () => {
+        setAuthStatus('Signing up...');
+        try {
+            await auth.createUserWithEmailAndPassword(emailInput.value, passwordInput.value);
+            setAuthStatus('Account created!');
+        } catch (err) {
+            setAuthStatus('Signup failed: ' + err.message);
+        }
+    });
+    logoutBtn.addEventListener('click', async () => {
+        await auth.signOut();
+        setAuthStatus('Logged out.');
+    });
+
+    // Sync helpers
+    function getUserDoc() {
+        return db.collection('users').doc(user.uid);
+    }
+
+    async function loadExpensesFromCloud() {
+        isSyncing = true;
+        setAuthStatus('Syncing from cloud...');
+        try {
+            const doc = await getUserDoc().get();
+            if (doc.exists && Array.isArray(doc.data().expenses)) {
+                expenses = doc.data().expenses;
+                saveExpenses(); // Save to localStorage for offline
+                renderExpenses();
+                setAuthStatus('Synced from cloud!');
+            } else {
+                expenses = [];
+                saveExpenses();
+                renderExpenses();
+                setAuthStatus('No cloud data found.');
+            }
+        } catch (err) {
+            setAuthStatus('Cloud sync failed: ' + err.message);
+        }
+        isSyncing = false;
+    }
+
+    async function saveExpensesToCloud() {
+        if (!user || isSyncing) return;
+        try {
+            await getUserDoc().set({ expenses }, { merge: true });
+            setAuthStatus('Synced to cloud!');
+        } catch (err) {
+            setAuthStatus('Cloud save failed: ' + err.message);
+        }
+    }
+
+    // Listen for auth state changes
+    auth.onAuthStateChanged(async (u) => {
+        user = u;
+        setAuthUI(!!user);
+        if (user) {
+            await loadExpensesFromCloud();
+        } else {
+            setAuthStatus('Not logged in.');
+        }
+    });
+
+    // Save to cloud on every change
+    const originalSaveExpenses = saveExpenses;
+    saveExpenses = function() {
+        originalSaveExpenses();
+        saveExpensesToCloud();
+    };
+    // --- FIREBASE AUTH & SYNC LOGIC END ---
+
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         const type = document.getElementById('type').value;
@@ -110,6 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderExpenses();
         form.reset();
         editIndex = null;
+        clearFormDraft(); // Clear draft on submit
     });
 
     expenseList.addEventListener('click', (e) => {
@@ -122,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (editIndex === Number(idx)) {
                     form.reset();
                     editIndex = null;
+                    clearFormDraft(); // Clear draft on reset after edit
                 }
             }
         }
